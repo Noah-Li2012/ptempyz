@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>pTempyz</title>
+  <style>
+    :root {
+      --bg: #121212;
+      --fg: #fff;
+      --toolbar-bg: #1e1e1e;
+      --toolbar-border: #333;
+      --editor-bg: #1e1e1e;
+      --preview-bg: #121212;
+      --button-bg: #222;
+      --button-hover: #444;
+      --highlight-string: #00FFAA;
+    }
+    body.light {
+      --bg: #f5f5f5;
+      --fg: #222;
+      --toolbar-bg: #fff;
+      --toolbar-border: #ddd;
+      --editor-bg: #fff;
+      --preview-bg: #f5f5f5;
+      --button-bg: #eee;
+      --button-hover: #ccc;
+      --highlight-string: #00796b;
+    }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--fg);
+      font-family: 'JetBrains Mono', 'Fira Mono', 'Consolas', monospace;
+      transition: background 0.3s, color 0.3s;
+    }
+    .toolbar {
+      background: var(--toolbar-bg);
+      padding: 10px 20px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      border-bottom: 1px solid var(--toolbar-border);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    }
+    .toolbar button {
+      background: var(--button-bg);
+      border: none;
+      border-radius: 8px;
+      padding: 6px 10px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      transition: background 0.2s;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+    }
+    .toolbar button:hover {
+      background: var(--button-hover);
+    }
+    .toolbar img {
+      width: 22px;
+      height: 22px;
+      display: block;
+    }
+    .toolbar h2 {
+      font-size: 1.1em;
+      font-weight: 400;
+      margin: 0 0 0 12px;
+      color: var(--fg);
+      flex: 1;
+      letter-spacing: 0.5px;
+    }
+    .container {
+      display: flex;
+      height: calc(100vh - 60px);
+      background: var(--bg);
+    }
+    .editor {
+      width: 50%;
+      padding: 18px 16px;
+      background: var(--editor-bg);
+      overflow: auto;
+      white-space: pre-wrap;
+      outline: none;
+      border-right: 1px solid var(--toolbar-border);
+      font-size: 1.1em;
+      border-radius: 0 0 0 12px;
+      transition: background 0.3s, color 0.3s;
+    }
+    .preview {
+      width: 50%;
+      background: var(--preview-bg);
+      border-left: 1px solid var(--toolbar-border);
+      border-radius: 0 0 12px 0;
+      transition: background 0.3s;
+    }
+    .highlight-string {
+      color: var(--highlight-string);
+    }
+    .mode-toggle {
+      background: none;
+      border: none;
+      cursor: pointer;
+      margin-right: 8px;
+      padding: 0;
+      display: flex;
+      align-items: center;
+    }
+    .mode-toggle img {
+      width: 26px;
+      height: 26px;
+      filter: drop-shadow(0 1px 2px rgba(0,0,0,0.08));
+    }
+  </style>
+</head>
+<body>
+
+  <div class="toolbar">
+    <button class="mode-toggle" id="modeToggle" title="Toggle light/dark mode">
+      <img id="modeIcon" src="https://api.iconify.design/mdi:weather-night.svg" alt="Toggle mode" />
+    </button>
+    <button onclick="copyCode()" title="Copy">
+      <img src="https://api.iconify.design/mdi:clipboard-outline.svg" alt="Copy" />
+    </button>
+    <button onclick="downloadFile()" title="Download">
+      <img src="https://api.iconify.design/mdi:download-outline.svg" alt="Download" />
+    </button>
+    <button onclick="uploadFile()" title="Upload">
+      <img src="https://api.iconify.design/mdi:upload-outline.svg" alt="Upload" />
+    </button>
+    <h2>Highlight most string to edit</h2>
+    <input type="file" id="fileInput" style="display:none" />
+  </div>
+
+  <div class="container">
+    <div class="editor" id="editor" contenteditable="true" oninput="onEdit()"></div>
+    <iframe class="preview" id="preview"></iframe>
+  </div>
+
+  <script>
+    const editor = document.getElementById('editor');
+    const preview = document.getElementById('preview');
+    const fileInput = document.getElementById('fileInput');
+    const modeToggle = document.getElementById('modeToggle');
+    const modeIcon = document.getElementById('modeIcon');
+
+    function setMode(mode) {
+      if (mode === 'light') {
+        document.body.classList.add('light');
+        modeIcon.src = 'https://api.iconify.design/mdi:white-balance-sunny.svg';
+      } else {
+        document.body.classList.remove('light');
+        modeIcon.src = 'https://api.iconify.design/mdi:weather-night.svg';
+      }
+      localStorage.setItem('theme_mode', mode);
+    }
+
+    modeToggle.onclick = function() {
+      const isLight = document.body.classList.contains('light');
+      setMode(isLight ? 'dark' : 'light');
+    };
+
+    function escapeHTML(str) {
+      return str.replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
+    }
+
+    function highlightStrings(text) {
+      let escaped = escapeHTML(text);
+
+      // Highlight all strings wrapped in "..." or '...'
+      escaped = escaped.replace(/(["'])(.*?)\1/g, (match, quote, content) => {
+        return `${quote}<span class="highlight-string">${content}</span>${quote}`;
+      });
+
+      return escaped;
+    }
+
+    function onEdit() {
+      const raw = editor.innerText;
+      localStorage.setItem('saved_code', raw);
+      preview.srcdoc = raw;
+      editor.innerHTML = highlightStrings(raw);
+      setCursorToEnd();
+    }
+
+    function setCursorToEnd() {
+      const range = document.createRange();
+      const sel = window.getSelection();
+      range.selectNodeContents(editor);
+      range.collapse(false);
+      sel.removeAllRanges();
+      sel.addRange(range);
+    }
+
+    function copyCode() {
+      const temp = document.createElement('textarea');
+      temp.value = editor.innerText;
+      document.body.appendChild(temp);
+      temp.select();
+      document.execCommand("copy");
+      document.body.removeChild(temp);
+      alert("Copied!");
+    }
+
+    function downloadFile() {
+      const blob = new Blob([editor.innerText], { type: "text/html" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "highlighted.html";
+      a.click();
+    }
+
+    function uploadFile() {
+      fileInput.click();
+      fileInput.onchange = () => {
+        const file = fileInput.files[0];
+        const reader = new FileReader();
+        reader.onload = () => {
+          editor.innerText = reader.result;
+          onEdit();
+        };
+        reader.readAsText(file);
+      };
+    }
+
+    // Load saved content and theme on page load
+    window.onload = () => {
+      const saved = localStorage.getItem('saved_code') || `<h1>"Welcome"</h1>\n<a href="https://example.com">'Click here'</a>`;
+      editor.innerText = saved;
+      onEdit();
+      const mode = localStorage.getItem('theme_mode') || 'dark';
+      setMode(mode);
+    };
+  </script>
+</body>
+</html>
